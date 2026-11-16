@@ -2,13 +2,17 @@ const API = "/.netlify/functions/api";
 let session = null;
 let bootstrap = null;
 let currentPage = "dashboard";
+let residentsCache = [];
 
 const $ = (id) => document.getElementById(id);
 const rupiah = (n) => new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n||0));
 
 async function api(action, data={}) {
   const res = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,token:session?.token,...data})});
-  const json = await res.json();
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch (e) { throw new Error("Server tidak mengirim JSON yang valid. Periksa deployment backend."); }
   if (!json.ok && json.message?.includes("Sesi berakhir")) logout(false);
   return json;
 }
@@ -34,11 +38,15 @@ function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;",
 $("loginForm").addEventListener("submit", async (e)=>{
   e.preventDefault();
   $("loginMessage").textContent="Memeriksa akun…";
-  const result = await api("login",{username:$("username").value.trim(),password:$("password").value});
-  if (!result.ok) { $("loginMessage").textContent=result.message; return; }
-  session = {token:result.token,user:result.user};
-  sessionStorage.setItem("g6b_session",JSON.stringify(session));
-  await loadDashboard();
+  try {
+    const result = await api("login",{username:$("username").value.trim(),password:$("password").value});
+    if (!result.ok) { $("loginMessage").textContent=result.message; return; }
+    session = {token:result.token,user:result.user};
+    sessionStorage.setItem("g6b_session",JSON.stringify(session));
+    await loadDashboard();
+  } catch(err) {
+    $("loginMessage").textContent=err.message || "Tidak dapat menghubungi server.";
+  }
 });
 
 $("logoutBtn").addEventListener("click",()=>logout(true));
@@ -67,10 +75,14 @@ function renderPage(){
   const titleMap={dashboard:"Dashboard",warga:"Data Warga",ronda:"Jadwal & Presensi Ronda",jimpitan:"Entri Jimpitan",setoran:"Setoran Jimpitan",kewajiban:"Kewajiban & Pembayaran",keuangan:"Penerimaan & Distribusi Kas",whatsapp:"Pusat WhatsApp",laporan:"Laporan",pengaturan:"Pengaturan Identitas"};
   let html=`<h1 class="page-title">${titleMap[currentPage]||"Dashboard"}</h1><p class="page-sub">Perum Guwosari Blok 6B · Sistem administrasi warga</p>`;
   if(currentPage==="dashboard") html+=dashboardHtml(admin);
+  else if(currentPage==="warga" && admin) {
+    html+=`<div class="card"><div class="muted">Memuat data 92 rumah…</div></div>`;
+  }
   else if(currentPage==="pengaturan" && admin) html+=settingsHtml();
-  else html+=`<div class="empty-state"><strong>Modul ${titleMap[currentPage]} masuk tahap pengerjaan berikutnya.</strong><p>Fondasi login dan database sudah disiapkan. Modul ini akan diaktifkan bertahap sesuai blueprint.</p></div>`;
+  else html+=`<div class="empty-state"><strong>Modul ${titleMap[currentPage]} masuk tahap pengerjaan berikutnya.</strong><p>Modul ini akan diaktifkan bertahap sesuai blueprint.</p></div>`;
   $("pageContent").innerHTML=html;
   if(currentPage==="pengaturan") bindSettings();
+  if(currentPage==="warga" && admin) loadResidentsPage();
 }
 
 function dashboardHtml(admin){
@@ -93,6 +105,107 @@ function dashboardHtml(admin){
   <div class="card"><strong>Fondasi aplikasi aktif</strong><p class="muted">Database, login, identitas aplikasi, dan ringkasan rumah telah disiapkan. Fitur operasional akan ditambahkan bertahap.</p><span class="pill">Tahap 1 · Fondasi</span></div></div>`;
 }
 
+async function loadResidentsPage(){
+  const host=$("pageContent");
+  try {
+    const result=await api("listResidents");
+    if(!result.ok) throw new Error(result.message||"Gagal memuat data warga.");
+    residentsCache=result.residents||[];
+    renderResidentsTable();
+  } catch(err) {
+    host.innerHTML+=`<div class="notice">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderResidentsTable(filter=""){
+  const q=filter.trim().toLowerCase();
+  const rows=residentsCache.filter(r=>r.house_no.includes(q)||r.name.toLowerCase().includes(q)||r.whatsapp.toLowerCase().includes(q));
+  const host=$("pageContent");
+  host.innerHTML=`
+    <h1 class="page-title">Data Warga</h1>
+    <p class="page-sub">Kelola identitas, nomor WhatsApp, status rumah, dan akun login untuk 92 rumah.</p>
+    <div class="grid" style="margin-bottom:14px">
+      <div class="card"><div class="card-label">Total rumah</div><div class="metric">${residentsCache.length}</div></div>
+      <div class="card"><div class="card-label">Rumah isi</div><div class="metric">${residentsCache.filter(r=>r.status_rumah==="isi").length}</div></div>
+      <div class="card"><div class="card-label">Rumah kosong</div><div class="metric">${residentsCache.filter(r=>r.status_rumah==="kosong").length}</div></div>
+      <div class="card"><div class="card-label">Akun warga aktif</div><div class="metric">${residentsCache.filter(r=>r.has_account).length}</div></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h2 class="section-title" style="margin-top:0">Ubah data rumah</h2>
+      <form id="residentForm" class="resident-form">
+        <div class="resident-fields">
+          <label>Nomor rumah
+            <select id="residentHouse" required>${residentsCache.map(r=>`<option value="${r.house_no}">${r.house_no}</option>`).join("")}</select>
+          </label>
+          <label>Nama warga
+            <input id="residentName" maxlength="100" placeholder="Nama kepala keluarga / warga">
+          </label>
+          <label>Nomor WhatsApp
+            <input id="residentWhatsapp" maxlength="25" placeholder="Contoh: 62812xxxxxxx">
+          </label>
+          <label>Status rumah
+            <select id="residentStatus"><option value="isi">Isi</option><option value="kosong">Kosong</option></select>
+          </label>
+        </div>
+        <div class="toolbar"><button class="btn primary" type="submit">Simpan data rumah</button><span id="residentMessage" class="muted-small" aria-live="polite"></span></div>
+      </form>
+    </div>
+    <div class="toolbar"><input id="residentSearch" placeholder="Cari nomor rumah, nama, atau WhatsApp..." value="${escapeHtml(filter)}"><span class="muted-small">Pilih tombol Edit untuk memuat data ke formulir.</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>No. Rumah</th><th>Nama warga</th><th>WhatsApp</th><th>Status</th><th>Akun</th><th>Aksi</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><strong>${r.house_no}</strong></td>
+        <td>${escapeHtml(r.name||"—")}</td>
+        <td>${escapeHtml(r.whatsapp||"—")}</td>
+        <td><span class="pill ${r.status_rumah==="kosong"?"gray":""}">${r.status_rumah==="kosong"?"Kosong":"Isi"}</span></td>
+        <td><span class="pill ${r.has_account?"":"warn"}">${r.has_account?"Aktif":"Belum dibuat"}</span></td>
+        <td><div class="row-actions"><button class="btn ghost edit-resident" data-house="${r.house_no}">Edit</button><button class="btn ghost account-resident" data-house="${r.house_no}">${r.has_account?"Atur ulang sandi":"Buat akun"}</button></div></td>
+      </tr>`).join("")||`<tr><td colspan="6">Data tidak ditemukan.</td></tr>`}</tbody>
+    </table></div>
+    <p class="muted-small" style="margin-top:10px">Catatan: perubahan status rumah hanya memperbarui data rumah. Akun login dikelola terpisah melalui tombol Buat akun / Atur ulang sandi.</p>
+  `;
+  const house=$("residentHouse");
+  const loadSelected=()=>{
+    const r=residentsCache.find(x=>x.house_no===house.value);
+    if(!r)return;
+    $("residentName").value=r.name;
+    $("residentWhatsapp").value=r.whatsapp;
+    $("residentStatus").value=r.status_rumah;
+  };
+  house.addEventListener("change",loadSelected);
+  loadSelected();
+  $("residentSearch").addEventListener("input",e=>renderResidentsTable(e.target.value));
+  $("residentForm").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const msg=$("residentMessage");
+    msg.textContent="Menyimpan…";
+    const payload={house_no:house.value,name:$("residentName").value,whatsapp:$("residentWhatsapp").value,status_rumah:$("residentStatus").value};
+    try{
+      const result=await api("saveResident",{resident:payload});
+      msg.textContent=result.message;
+      if(result.ok){
+        const fresh=await api("listResidents");
+        if(fresh.ok){residentsCache=fresh.residents;renderResidentsTable($("residentSearch")?.value||"");}
+      }
+    }catch(err){msg.textContent=err.message;}
+  });
+  document.querySelectorAll(".edit-resident").forEach(btn=>btn.addEventListener("click",()=>{
+    house.value=btn.dataset.house;loadSelected();
+    $("residentForm").scrollIntoView({behavior:"smooth",block:"center"});
+  }));
+  document.querySelectorAll(".account-resident").forEach(btn=>btn.addEventListener("click",async()=>{
+    const no=btn.dataset.house;
+    const password=prompt(`Masukkan password awal baru untuk akun rumah ${no} (minimal 10 karakter):`);
+    if(password===null)return;
+    if(password.length<10){alert("Password minimal 10 karakter.");return;}
+    try{
+      const result=await api("setResidentPassword",{house_no:no,password});
+      alert(result.message);
+      if(result.ok){const fresh=await api("listResidents");if(fresh.ok){residentsCache=fresh.residents;renderResidentsTable($("residentSearch")?.value||"");}}
+    }catch(err){alert(err.message);}
+  }));
+}
+
 function settingsHtml(){
   const i=bootstrap.identity||{};
   const fields=[["nama_perumahan","Nama perumahan"],["nama_aplikasi","Nama aplikasi"],["subjudul","Subjudul"],["logo_url","URL logo (sementara)"],["warna_utama","Warna utama"],["nama_bendahara","Nama bendahara"],["nama_bank","Nama bank"],["nomor_rekening","Nomor rekening"],["atas_nama_rekening","Atas nama rekening"],["whatsapp_bendahara","WhatsApp bendahara"]];
@@ -111,7 +224,7 @@ function bindSettings(){
 }
 
 async function logout(callApi=true){
-  if(callApi && session) await api("logout");
+  if(callApi && session) { try { await api("logout"); } catch(e) {} }
   session=null;bootstrap=null;sessionStorage.removeItem("g6b_session");
   $("dashboardView").classList.add("hidden");$("loginView").classList.remove("hidden");$("password").value="";
 }
@@ -119,6 +232,6 @@ async function logout(callApi=true){
 (async function init(){
   const saved=sessionStorage.getItem("g6b_session");
   if(saved){
-    try{session=JSON.parse(saved);await loadDashboard();}catch(e){logout(false);}
+    try{session=JSON.parse(saved);await loadDashboard();}catch(e){await logout(false);}
   }
 })();
