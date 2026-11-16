@@ -199,7 +199,10 @@ function renderResidentsTable(filter=""){
   `Masukkan PIN rumah ${no} (tepat 6 digit angka):`
 );
     if(password===null)return;
-    if(password.length<10){alert("Password minimal 10 karakter.");return;}
+    if (!/^\d{6}$/.test(password)) {
+  alert("PIN harus tepat 6 digit angka.");
+  return;
+}
     try{
       const result=await api("setResidentPassword",{house_no:no,password});
       alert(result.message);
