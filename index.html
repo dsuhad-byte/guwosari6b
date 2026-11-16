@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#193B63">
+  <title>Guwosari 6B — Sistem Informasi Warga</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="app">
+    <section id="loginView" class="login-shell">
+      <div class="login-card">
+        <div class="brand-mark" id="loginLogo">⌂</div>
+        <p class="eyebrow" id="loginHousing">PERUM GUWOSARI BLOK 6B</p>
+        <h1 id="loginAppName">Sistem Informasi Warga dan Keuangan</h1>
+        <p class="muted" id="loginSubtitle">Jimpitan · Ronda · Kewajiban · Keuangan</p>
+        <form id="loginForm">
+          <label>Nomor rumah / Username admin
+            <input id="username" autocomplete="username" placeholder="Contoh: 01 atau 6b-01" required>
+          </label>
+          <label>Password
+            <input id="password" type="password" autocomplete="current-password" placeholder="Masukkan password" required>
+          </label>
+          <button class="btn primary full" type="submit">Masuk</button>
+          <p id="loginMessage" class="form-message" aria-live="polite"></p>
+        </form>
+      </div>
+      <p class="footer-note">Aplikasi resmi lingkungan · Akses sesuai akun</p>
+    </section>
+
+    <section id="dashboardView" class="hidden">
+      <header class="topbar">
+        <div class="brand-inline">
+          <div class="brand-mark small" id="dashLogo">⌂</div>
+          <div><strong id="dashHousing">Guwosari Blok 6B</strong><small id="dashAppName">Sistem Informasi Warga</small></div>
+        </div>
+        <div class="top-actions"><span id="userLabel"></span><button id="logoutBtn" class="btn ghost">Keluar</button></div>
+      </header>
+      <div class="layout">
+        <aside class="sidebar">
+          <p class="eyebrow">MENU UTAMA</p>
+          <nav id="sideNav">
+            <button class="nav-item active" data-page="dashboard">▦ Dashboard</button>
+            <button class="nav-item" data-page="warga">⌂ Data Warga</button>
+            <button class="nav-item" data-page="ronda">◷ Jadwal & Presensi</button>
+            <button class="nav-item" data-page="jimpitan">▤ Entri Jimpitan</button>
+            <button class="nav-item" data-page="setoran">⇧ Setoran Jimpitan</button>
+            <button class="nav-item" data-page="kewajiban">▣ Kewajiban & Pembayaran</button>
+            <button class="nav-item" data-page="keuangan">◉ Penerimaan & Kas</button>
+            <button class="nav-item" data-page="whatsapp">☏ WhatsApp</button>
+            <button class="nav-item" data-page="laporan">▥ Laporan</button>
+            <button class="nav-item admin-only" data-page="pengaturan">⚙ Pengaturan</button>
+          </nav>
+        </aside>
+        <section class="content">
+          <div id="pageContent"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
