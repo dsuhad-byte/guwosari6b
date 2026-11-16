@@ -264,7 +264,103 @@ function renderRondaPage(){
   <div class="card" style="margin-bottom:14px"><h2 class="section-title" style="margin-top:0">Pembagian anggota kelompok</h2>${active?`<p class="muted-small">Satu rumah hanya boleh berada pada satu kelompok. Rumah kosong dan bebas ronda tidak ditampilkan sebagai anggota yang dapat dijadwalkan.</p><div class="table-wrap"><table><thead><tr><th>Rumah</th><th>Nama</th><th>Jadwal saat ini</th><th>Ubah hari</th><th>Aksi</th></tr></thead><tbody>${memberRows}</tbody></table></div>`:'<p class="muted">Aktifkan periode terlebih dahulu untuk mengatur anggota.</p>'}<p id="rondaMemberMessage" class="muted-small"></p></div>
   <div class="card" style="margin-bottom:14px"><h2 class="section-title" style="margin-top:0">Status bebas ronda</h2><p class="muted-small">Rumah isi yang bebas ronda tidak mendapat jadwal dan tidak dikenai denda alpa, tetapi tetap wajib jimpitan. Rumah kosong otomatis bebas ronda dan jimpitan.</p><div class="table-wrap"><table><thead><tr><th>Rumah</th><th>Nama</th><th>Status ronda</th><th>Alasan</th><th>Aksi</th></tr></thead><tbody>${exemptRows}</tbody></table></div><p id="rondaExemptionMessage" class="muted-small"></p></div>
   <div class="card"><h2 class="section-title" style="margin-top:0">Riwayat periode</h2><div class="table-wrap"><table><thead><tr><th>Mulai</th><th>Akhir</th><th>Keterangan</th><th>Status</th></tr></thead><tbody>${periodRows||'<tr><td colspan="4">Belum ada riwayat.</td></tr>'}</tbody></table></div></div>`;
-  $("rondaPeriodForm").addEventListener("submit",async e=>{e.preventDefault();const msg=$("rondaPeriodMessage");msg.textContent="Menyimpan…";const res=await api("saveRondaPeriod",{period:{start_date:$("rondaStart").value,end_date:$("rondaEnd").value,description:$("rondaDescription").value}});msg.textContent=res.message;if(res.ok)await loadRondaPage();});
-  document.querySelectorAll(".save-ronda-member").forEach(btn=>btn.addEventListener("click",async()=>{const no=btn.dataset.house;const day=document.querySelector(`.ronda-day[data-house="${no}"]`).value;const msg=$("rondaMemberMessage");msg.textContent="Menyimpan perubahan…";const res=await api("saveRondaMember",{member:{house_no:no,day_name:day,change_note:"Perubahan jadwal oleh admin"}});msg.textContent=res.message;if(res.ok)await loadRondaPage();}));
-  document.querySelectorAll(".save-ronda-exemption").forEach(btn=>btn.addEventListener("click",async()=>{const no=btn.dataset.house;const status=document.querySelector(`.ronda-status[data-house="${no}"]`).value;const reason=document.querySelector(`.ronda-reason[data-house="${no}"]`).value;const msg=$("rondaExemptionMessage");msg.textContent="Menyimpan…";const res=await api("saveRondaExemption",{exemption:{house_no:no,status_ronda:status,alasan:reason}});msg.textContent=res.message;if(res.ok)await loadRondaPage();}));
+  // SIMPAN PERIODE RONDA
+$("rondaPeriodForm").addEventListener("submit", async e => {
+  e.preventDefault();
+
+  const msg = $("rondaPeriodMessage");
+  const btn = e.submitter;
+  btn.disabled = true;
+  msg.textContent = "⏳ Sedang menyimpan...";
+
+  try {
+    const res = await api("saveRondaPeriod", {
+      period: {
+        start_date: $("rondaStart").value,
+        end_date: $("rondaEnd").value,
+        description: $("rondaDescription").value
+      }
+    });
+
+    if (!res.ok) throw new Error(res.message);
+
+    await loadRondaPage();
+    $("rondaPeriodMessage").textContent = "✅ " + res.message;
+
+  } catch (err) {
+    msg.textContent = "❌ Gagal menyimpan: " + err.message;
+    btn.disabled = false;
+  }
+});
+
+// SIMPAN PEMBAGIAN ANGGOTA
+document.querySelectorAll(".save-ronda-member").forEach(btn => {
+  btn.addEventListener("click", async () => {
+    const no = btn.dataset.house;
+    const day = document.querySelector(
+      `.ronda-day[data-house="${no}"]`
+    ).value;
+
+    const msg = $("rondaMemberMessage");
+    btn.disabled = true;
+    msg.textContent = "⏳ Sedang menyimpan...";
+
+    try {
+      const res = await api("saveRondaMember", {
+        member: {
+          house_no: no,
+          day_name: day,
+          change_note: "Perubahan jadwal oleh admin"
+        }
+      });
+
+      if (!res.ok) throw new Error(res.message);
+
+      await loadRondaPage();
+      $("rondaMemberMessage").textContent = "✅ " + res.message;
+
+    } catch (err) {
+      msg.textContent = "❌ Gagal menyimpan: " + err.message;
+      btn.disabled = false;
+    }
+  });
+});
+
+// SIMPAN STATUS BEBAS RONDA
+document.querySelectorAll(".save-ronda-exemption").forEach(btn => {
+  btn.addEventListener("click", async () => {
+    const no = btn.dataset.house;
+
+    const status = document.querySelector(
+      `.ronda-status[data-house="${no}"]`
+    ).value;
+
+    const reason = document.querySelector(
+      `.ronda-reason[data-house="${no}"]`
+    ).value;
+
+    const msg = $("rondaExemptionMessage");
+    btn.disabled = true;
+    msg.textContent = "⏳ Sedang menyimpan...";
+
+    try {
+      const res = await api("saveRondaExemption", {
+        exemption: {
+          house_no: no,
+          status_ronda: status,
+          alasan: reason
+        }
+      });
+
+      if (!res.ok) throw new Error(res.message);
+
+      await loadRondaPage();
+      $("rondaExemptionMessage").textContent = "✅ " + res.message;
+
+    } catch (err) {
+      msg.textContent = "❌ Gagal menyimpan: " + err.message;
+      btn.disabled = false;
+    }
+  });
+});.forEach(btn=>btn.addEventListener("click",async()=>{const no=btn.dataset.house;const status=document.querySelector(`.ronda-status[data-house="${no}"]`).value;const reason=document.querySelector(`.ronda-reason[data-house="${no}"]`).value;const msg=$("rondaExemptionMessage");msg.textContent="Menyimpan…";const res=await api("saveRondaExemption",{exemption:{house_no:no,status_ronda:status,alasan:reason}});msg.textContent=res.message;if(res.ok)await loadRondaPage();}));
 }
