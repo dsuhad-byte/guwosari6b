@@ -79,10 +79,13 @@ function renderPage(){
     html+=`<div class="card"><div class="muted">Memuat data 92 rumah…</div></div>`;
   }
   else if(currentPage==="pengaturan" && admin) html+=settingsHtml();
+  else if(currentPage==="ronda" && admin) html+=`<div class="card"><div class="muted">Memuat pengaturan ronda…</div></div>`;
+  else if(currentPage==="ronda" && !admin) html+=`<div class="empty-state">Pengaturan ronda hanya dapat diakses admin.</div>`;
   else html+=`<div class="empty-state"><strong>Modul ${titleMap[currentPage]} masuk tahap pengerjaan berikutnya.</strong><p>Modul ini akan diaktifkan bertahap sesuai blueprint.</p></div>`;
   $("pageContent").innerHTML=html;
   if(currentPage==="pengaturan") bindSettings();
   if(currentPage==="warga" && admin) loadResidentsPage();
+  if(currentPage==="ronda" && admin) loadRondaPage();
 }
 
 function dashboardHtml(admin){
@@ -240,3 +243,28 @@ async function logout(callApi=true){
     try{session=JSON.parse(saved);await loadDashboard();}catch(e){await logout(false);}
   }
 })();
+
+
+/* PENGATURAN RONDA - UI VERSI 1 */
+let rondaConfigCache = null;
+async function loadRondaPage(){
+  const host=$("pageContent");
+  try{const result=await api("getRondaConfig");if(!result.ok)throw new Error(result.message||"Gagal memuat pengaturan ronda.");rondaConfigCache=result;renderRondaPage();}
+  catch(err){host.innerHTML+=`<div class="notice">${escapeHtml(err.message)}</div>`;}
+}
+function renderRondaPage(){
+  const d=rondaConfigCache;const active=d.periods.find(p=>p.period_id===d.active_period_id);const eligible=d.residents.filter(r=>r.status_rumah==="isi"&&r.status_ronda!=="bebas");
+  const currentMap={};d.schedules.forEach(s=>currentMap[s.house_no]=s.day_name);
+  const periodRows=d.periods.slice().reverse().map(p=>`<tr><td>${escapeHtml(p.start_date)}</td><td>${escapeHtml(p.end_date||"Berjalan")}</td><td>${escapeHtml(p.description||"-")}</td><td>${p.period_id===d.active_period_id?'<span class="pill">Aktif</span>':'<span class="pill gray">Riwayat</span>'}</td></tr>`).join("");
+  const memberRows=eligible.map(r=>`<tr><td><strong>${r.house_no}</strong></td><td>${escapeHtml(r.name||"- ")}</td><td>${escapeHtml(currentMap[r.house_no]||"Belum dijadwalkan")}</td><td><select class="ronda-day" data-house="${r.house_no}"><option value="">Belum dijadwalkan</option>${d.days.map(day=>`<option value="${day}" ${currentMap[r.house_no]===day?"selected":""}>${day}</option>`).join("")}</select></td><td><button class="btn ghost save-ronda-member" data-house="${r.house_no}">Simpan</button></td></tr>`).join("");
+  const exemptRows=d.residents.map(r=>`<tr><td><strong>${r.house_no}</strong></td><td>${escapeHtml(r.name||"-")}</td><td>${r.status_rumah==="kosong"?'<span class="pill gray">Rumah kosong</span>':`<select class="ronda-status" data-house="${r.house_no}" ${r.status_rumah==="kosong"?"disabled":""}><option value="wajib" ${r.status_ronda!=="bebas"?"selected":""}>Wajib ronda</option><option value="bebas" ${r.status_ronda==="bebas"?"selected":""}>Bebas ronda</option></select>`}</td><td><input class="ronda-reason" data-house="${r.house_no}" value="${escapeHtml(r.alasan_bebas_ronda||"")}" placeholder="Alasan jika bebas" ${r.status_rumah==="kosong"?"disabled":""}></td><td><button class="btn ghost save-ronda-exemption" data-house="${r.house_no}" ${r.status_rumah==="kosong"?"disabled":""}>Simpan</button></td></tr>`).join("");
+  $("pageContent").innerHTML=`<h1 class="page-title">Pengaturan Ronda</h1><p class="page-sub">Periode bebas ditentukan admin. Perubahan anggota langsung berlaku setelah disimpan.</p>
+  <div class="card" style="margin-bottom:14px"><h2 class="section-title" style="margin-top:0">Periode aktif</h2>${active?`<p><strong>${escapeHtml(active.description||"Periode ronda")}</strong> · Mulai ${escapeHtml(active.start_date)} · ${active.end_date?"Sampai "+escapeHtml(active.end_date):"Tanpa tanggal akhir"}</p>`:'<p class="muted">Belum ada periode aktif. Buat periode terlebih dahulu.</p>'}
+  <form id="rondaPeriodForm" class="resident-form"><div class="resident-fields"><label>Tanggal mulai<input type="date" id="rondaStart" required></label><label>Tanggal akhir (opsional)<input type="date" id="rondaEnd"></label><label>Nama/keterangan periode<input id="rondaDescription" maxlength="120" placeholder="Contoh: Periode November 2026"></label></div><div class="toolbar"><button class="btn primary" type="submit">Buat & aktifkan periode baru</button><span id="rondaPeriodMessage" class="muted-small"></span></div></form></div>
+  <div class="card" style="margin-bottom:14px"><h2 class="section-title" style="margin-top:0">Pembagian anggota kelompok</h2>${active?`<p class="muted-small">Satu rumah hanya boleh berada pada satu kelompok. Rumah kosong dan bebas ronda tidak ditampilkan sebagai anggota yang dapat dijadwalkan.</p><div class="table-wrap"><table><thead><tr><th>Rumah</th><th>Nama</th><th>Jadwal saat ini</th><th>Ubah hari</th><th>Aksi</th></tr></thead><tbody>${memberRows}</tbody></table></div>`:'<p class="muted">Aktifkan periode terlebih dahulu untuk mengatur anggota.</p>'}<p id="rondaMemberMessage" class="muted-small"></p></div>
+  <div class="card" style="margin-bottom:14px"><h2 class="section-title" style="margin-top:0">Status bebas ronda</h2><p class="muted-small">Rumah isi yang bebas ronda tidak mendapat jadwal dan tidak dikenai denda alpa, tetapi tetap wajib jimpitan. Rumah kosong otomatis bebas ronda dan jimpitan.</p><div class="table-wrap"><table><thead><tr><th>Rumah</th><th>Nama</th><th>Status ronda</th><th>Alasan</th><th>Aksi</th></tr></thead><tbody>${exemptRows}</tbody></table></div><p id="rondaExemptionMessage" class="muted-small"></p></div>
+  <div class="card"><h2 class="section-title" style="margin-top:0">Riwayat periode</h2><div class="table-wrap"><table><thead><tr><th>Mulai</th><th>Akhir</th><th>Keterangan</th><th>Status</th></tr></thead><tbody>${periodRows||'<tr><td colspan="4">Belum ada riwayat.</td></tr>'}</tbody></table></div></div>`;
+  $("rondaPeriodForm").addEventListener("submit",async e=>{e.preventDefault();const msg=$("rondaPeriodMessage");msg.textContent="Menyimpan…";const res=await api("saveRondaPeriod",{period:{start_date:$("rondaStart").value,end_date:$("rondaEnd").value,description:$("rondaDescription").value}});msg.textContent=res.message;if(res.ok)await loadRondaPage();});
+  document.querySelectorAll(".save-ronda-member").forEach(btn=>btn.addEventListener("click",async()=>{const no=btn.dataset.house;const day=document.querySelector(`.ronda-day[data-house="${no}"]`).value;const msg=$("rondaMemberMessage");msg.textContent="Menyimpan perubahan…";const res=await api("saveRondaMember",{member:{house_no:no,day_name:day,change_note:"Perubahan jadwal oleh admin"}});msg.textContent=res.message;if(res.ok)await loadRondaPage();}));
+  document.querySelectorAll(".save-ronda-exemption").forEach(btn=>btn.addEventListener("click",async()=>{const no=btn.dataset.house;const status=document.querySelector(`.ronda-status[data-house="${no}"]`).value;const reason=document.querySelector(`.ronda-reason[data-house="${no}"]`).value;const msg=$("rondaExemptionMessage");msg.textContent="Menyimpan…";const res=await api("saveRondaExemption",{exemption:{house_no:no,status_ronda:status,alasan:reason}});msg.textContent=res.message;if(res.ok)await loadRondaPage();}));
+}
