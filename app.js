@@ -195,7 +195,9 @@ function renderResidentsTable(filter=""){
   }));
   document.querySelectorAll(".account-resident").forEach(btn=>btn.addEventListener("click",async()=>{
     const no=btn.dataset.house;
-    const password=prompt(`Masukkan password awal baru untuk akun rumah ${no} (minimal 10 karakter):`);
+    const password = prompt(
+  `Masukkan PIN rumah ${no} (tepat 6 digit angka):`
+);
     if(password===null)return;
     if(password.length<10){alert("Password minimal 10 karakter.");return;}
     try{
